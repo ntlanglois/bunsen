@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
@@ -209,7 +210,6 @@ public class Bundles {
     FhirContext context = FhirContexts.contextFor(fhirVersion);
 
     SparkRowConverter converter = SparkRowConverter.forResource(context, resourceTypeUrl);
-
 
     JavaRDD<Row> resourceRdd = bundles.flatMap(
         new ToResourceRow(converter.getResourceType(),

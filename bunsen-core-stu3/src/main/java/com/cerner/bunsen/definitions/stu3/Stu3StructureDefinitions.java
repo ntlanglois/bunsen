@@ -9,21 +9,27 @@ import com.cerner.bunsen.definitions.StructureDefinitions;
 import com.cerner.bunsen.definitions.StructureField;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.hl7.fhir.dstu3.model.ElementDefinition;
 import org.hl7.fhir.dstu3.model.ElementDefinition.TypeRefComponent;
 import org.hl7.fhir.dstu3.model.StructureDefinition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link StructureDefinitions} implementation for FHIR STU3.
  */
 public class Stu3StructureDefinitions extends StructureDefinitions {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(Stu3StructureDefinitions.class);
 
   private static final FhirConversionSupport CONVERSION_SUPPORT = new Stu3FhirConversionSupport();
 
@@ -273,6 +279,62 @@ public class Stu3StructureDefinitions extends StructureDefinitions {
 
       // Fields with max of zero are omitted.
       return Collections.emptyList();
+
+    } else if (element.getTypeFirstRep() == null) {
+
+      final StringBuffer messageBuilder = new StringBuffer();
+      messageBuilder.append("!!!!! START null getTypeFirstRep ----------");
+      messageBuilder.append("\n!! fhirType: ");
+      messageBuilder.append(element.fhirType());
+      messageBuilder.append("\n!! contentReference: ");
+      messageBuilder.append(element.getContentReference());
+      messageBuilder.append("\n!! path: ");
+      messageBuilder.append(element.getPath());
+      messageBuilder.append("\n!! label: ");
+      messageBuilder.append(element.getLabel());
+      messageBuilder.append("\n!! definition: ");
+      messageBuilder.append(element.getDefinition());
+      messageBuilder.append("\n!! meaningWhenMissing: ");
+      messageBuilder.append(element.getMeaningWhenMissing());
+      messageBuilder.append("\n!! requirements: ");
+      messageBuilder.append(element.getRequirements());
+      messageBuilder.append("\n!! alias: ");
+      messageBuilder.append(
+          element.getAlias() == null ? null : Arrays.toString(element.getAlias().toArray()));
+      messageBuilder.append("\n!! defaultValue: ");
+      messageBuilder
+          .append(element.getDefaultValue() == null ? null : element.getDefaultValue().fhirType());
+      messageBuilder.append("\n!! fixed: ");
+      messageBuilder.append(element.getFixed() == null ? null : element.getFixed().fhirType());
+      messageBuilder.append("\n!! type: ");
+      messageBuilder
+          .append(element.getType() == null ? null : Arrays.toString(element.getType().toArray()));
+      element.children().forEach(c -> {
+        messageBuilder.append("\n! child definition: ");
+        messageBuilder.append(c.getDefinition());
+        messageBuilder.append("\n! child name: ");
+        messageBuilder.append(c.getName());
+        messageBuilder.append("\n! child typeCode: ");
+        messageBuilder.append(c.getTypeCode());
+        messageBuilder.append("\n! child structure: ");
+        messageBuilder.append(c.getStructure());
+        c.getValues().stream().filter(Objects::nonNull).forEach(v -> {
+          messageBuilder.append("\n. child value fhirType: ");
+          messageBuilder.append(v.fhirType());
+          messageBuilder.append("\n. child value primitiveValue: ");
+          messageBuilder.append(v.primitiveValue());
+        });
+      });
+      messageBuilder.append("\n!! typeFirstRep -- should be null: ");
+      messageBuilder.append(element.getTypeFirstRep());
+      messageBuilder.append("\n!!!!! END ---------------------------------");
+
+      String message = messageBuilder.toString();
+      LOGGER.info(message);
+      System.out.println(message);
+
+      throw new NullPointerException("!!!!!!!! getTypeFirstRep() NPE -- contact Foresight team "
+          + "ASAP so they can capture logging context for further investigation");
 
     } else if ("Extension".equals(element.getTypeFirstRep().getCode())) {
 
