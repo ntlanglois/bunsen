@@ -6,13 +6,13 @@ import ca.uhn.fhir.context.RuntimeResourceDefinition;
 import ca.uhn.fhir.parser.IParser;
 import com.cerner.bunsen.FhirContexts;
 import com.cerner.bunsen.definitions.FhirConversionSupport;
+import com.cerner.bunsen.spark.serializable.HasSerializableContext;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.apache.commons.lang3.SerializationUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
@@ -211,6 +211,7 @@ public class Bundles {
 
     SparkRowConverter converter = SparkRowConverter.forResource(context, resourceTypeUrl);
 
+
     JavaRDD<Row> resourceRdd = bundles.flatMap(
         new ToResourceRow(converter.getResourceType(),
             resourceTypeUrl,
@@ -310,40 +311,23 @@ public class Bundles {
     }
   }
 
-  private static class StringToBundle implements Function<String, BundleContainer> {
+  private static class StringToBundle extends HasSerializableContext implements
+      Function<String, BundleContainer> {
 
     private boolean isXml;
 
-    private FhirVersionEnum fhirVersion;
-
-    private transient IParser parser;
-
     StringToBundle(boolean isXml, FhirVersionEnum fhirVersion) {
+      super(fhirVersion);
+
       this.isXml = isXml;
-      this.fhirVersion = fhirVersion;
-
-      parser = isXml
-          ? FhirContexts.contextFor(fhirVersion).newXmlParser()
-          : FhirContexts.contextFor(fhirVersion).newJsonParser();
-    }
-
-    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
-
-      stream.defaultWriteObject();
-    }
-
-    private void readObject(java.io.ObjectInputStream stream) throws IOException,
-        ClassNotFoundException {
-
-      stream.defaultReadObject();
-
-      parser = isXml
-          ? FhirContexts.contextFor(fhirVersion).newXmlParser()
-          : FhirContexts.contextFor(fhirVersion).newJsonParser();
     }
 
     @Override
     public BundleContainer call(String bundleString) throws Exception {
+
+      IParser parser = isXml
+          ? context.newXmlParser()
+          : context.newJsonParser();
 
       IBaseBundle bundle = (IBaseBundle) parser.parseResource(bundleString);
 
@@ -351,33 +335,11 @@ public class Bundles {
     }
   }
 
-  private static class ToBundle implements Function<Tuple2<String, String>, BundleContainer> {
-
-    private FhirVersionEnum fhirVersion;
-
-    private transient IParser xmlParser;
-
-    private transient IParser jsonParser;
+  private static class ToBundle extends HasSerializableContext implements
+      Function<Tuple2<String, String>, BundleContainer> {
 
     ToBundle(FhirVersionEnum fhirVersion) {
-      this.fhirVersion = fhirVersion;
-
-      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
-      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
-    }
-
-    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
-
-      stream.defaultWriteObject();
-    }
-
-    private void readObject(java.io.ObjectInputStream stream) throws IOException,
-        ClassNotFoundException {
-
-      stream.defaultReadObject();
-
-      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
-      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
+      super(fhirVersion);
     }
 
     @Override
@@ -385,20 +347,23 @@ public class Bundles {
 
       String filePath = fileContentTuple._1.toLowerCase();
 
+      IParser parser;
+
       if (filePath.endsWith(".xml")) {
 
-        return new BundleContainer((IBaseBundle) xmlParser.parseResource(fileContentTuple._2()),
-            fhirVersion);
+        parser = context.newXmlParser();
 
       } else if (filePath.endsWith(".json")) {
 
-        return new BundleContainer((IBaseBundle) jsonParser.parseResource(fileContentTuple._2()),
-            fhirVersion);
+        parser = context.newJsonParser();
 
       } else {
 
         throw new RuntimeException("Unrecognized file extension for resource: " + filePath);
       }
+
+      return new BundleContainer((IBaseBundle) parser.parseResource(fileContentTuple._2()),
+          fhirVersion);
     }
   }
 

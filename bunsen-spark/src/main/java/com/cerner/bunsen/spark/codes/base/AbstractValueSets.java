@@ -3,6 +3,7 @@ package com.cerner.bunsen.spark.codes.base;
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.lit;
 
+import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.parser.IParser;
 import com.cerner.bunsen.FhirContexts;
@@ -10,6 +11,7 @@ import com.cerner.bunsen.spark.SparkRowConverter;
 import com.cerner.bunsen.spark.codes.UrlAndVersion;
 import com.cerner.bunsen.spark.codes.Value;
 
+import com.cerner.bunsen.spark.converters.HasSerializableConverter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -30,8 +32,6 @@ import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.hl7.fhir.instance.model.api.IBaseResource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 
 /**
@@ -44,8 +44,6 @@ import scala.Tuple2;
  * @param <C> the type of the subclass of this class being used.
  */
 public abstract class AbstractValueSets<T extends IBaseResource,C extends AbstractValueSets<T,C>> {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(AbstractValueSets.class);
 
   /**
    * An encoder for serializing values.
@@ -141,22 +139,6 @@ public abstract class AbstractValueSets<T extends IBaseResource,C extends Abstra
    * @return a map of value set URIs to the latest versions for them.
    */
   public Map<String,String> getLatestVersions(final Set<String> uris, boolean includeExperimental) {
-    StringBuffer messageBuilder = new StringBuffer();
-    messageBuilder.append("!!!!! START getLatestVersions ----------");
-    messageBuilder.append("\n!! uris: ");
-    messageBuilder.append(uris == null ? null : Arrays.toString(uris.toArray()));
-    messageBuilder.append("\n!! includeExperimental: ");
-    messageBuilder.append(includeExperimental);
-    boolean npeActions = "true".equalsIgnoreCase(spark.conf().get("bunsen.npe.actions", "false"));
-    if (npeActions) {
-      messageBuilder.append("\n!! valueSets action: ");
-      messageBuilder.append(Arrays.toString(valueSets.collectAsList().toArray()));
-    }
-    messageBuilder.append("\n!!!!! END ---------------------------------");
-
-    String message = messageBuilder.toString();
-    LOGGER.info(message);
-    System.out.println(message);
 
     // Reduce by the concept map URI to return only the latest version
     // per concept map. Spark's provided max aggregation function
@@ -171,35 +153,11 @@ public abstract class AbstractValueSets<T extends IBaseResource,C extends Abstra
             leftVersion.compareTo(rightVersion) > 0 ? leftVersion : rightVersion)
         .map(tuple -> new UrlAndVersion(tuple._1, tuple._2));
 
-    if (npeActions) {
-      messageBuilder = new StringBuffer();
-      messageBuilder.append("!!!!! START valueSets transformed rdd action ----------");
-      messageBuilder.append("\n!! valueSets as membersRDD action: ");
-      messageBuilder.append(Arrays.toString(members.collect().toArray()));
-      messageBuilder.append("\n!!!!! END ---------------------------------");
-
-      message = messageBuilder.toString();
-      LOGGER.info(message);
-      System.out.println(message);
-    }
-
-    final Map<String,String> retMap = spark.createDataset(members.rdd(), URL_AND_VERSION_ENCODER)
+    return spark.createDataset(members.rdd(), URL_AND_VERSION_ENCODER)
         .collectAsList()
         .stream()
         .collect(Collectors.toMap(UrlAndVersion::getUrl,
             UrlAndVersion::getVersion));
-
-    messageBuilder = new StringBuffer();
-    messageBuilder.append("!!!!! START valueSets transformed rdd->dataset action ----------");
-    messageBuilder.append("\n!! valueSets as URL+Version map: ");
-    messageBuilder.append(Arrays.toString(retMap.entrySet().toArray()));
-    messageBuilder.append("\n!!!!! END ---------------------------------");
-
-    message = messageBuilder.toString();
-    LOGGER.info(message);
-    System.out.println(message);
-
-    return retMap;
   }
 
   /**
@@ -426,62 +384,33 @@ public abstract class AbstractValueSets<T extends IBaseResource,C extends Abstra
     return withValueSets(valueSets);
   }
 
-  private static class ToValueSet implements Function<Tuple2<String, String>, Row> {
-
-    private FhirVersionEnum fhirVersion;
-
-    private transient IParser xmlParser;
-
-    private transient IParser jsonParser;
-
-    private transient SparkRowConverter converter;
+  private static class ToValueSet extends HasSerializableConverter implements
+      Function<Tuple2<String, String>, Row> {
 
     ToValueSet(FhirVersionEnum fhirVersion) {
-      this.fhirVersion = fhirVersion;
-
-      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
-      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
-
-      converter = SparkRowConverter.forResource(FhirContexts.contextFor(fhirVersion),
-          "ValueSet");
-    }
-
-    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
-
-      stream.defaultWriteObject();
-    }
-
-    private void readObject(java.io.ObjectInputStream stream) throws IOException,
-        ClassNotFoundException {
-
-      stream.defaultReadObject();
-
-      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
-      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
-
-      converter = SparkRowConverter.forResource(FhirContexts.contextFor(fhirVersion),
-          "ValueSet");
+      super("ValueSet", fhirVersion);
     }
 
     @Override
     public Row call(Tuple2<String, String> fileContentTuple) throws Exception {
 
       String filePath = fileContentTuple._1.toLowerCase();
-
-      IBaseResource resource;
+      IParser parser;
 
       if (filePath.endsWith(".xml")) {
 
-        resource = xmlParser.parseResource(fileContentTuple._2());
+        parser = context.newXmlParser();
 
       } else if (filePath.endsWith(".json")) {
 
-        resource = jsonParser.parseResource(fileContentTuple._2());
+        parser = context.newJsonParser();
 
       } else {
 
         throw new RuntimeException("Unrecognized file extension for resource: " + filePath);
       }
+
+      IBaseResource resource = parser.parseResource(fileContentTuple._2());
 
       return converter.resourceToRow(resource);
     }

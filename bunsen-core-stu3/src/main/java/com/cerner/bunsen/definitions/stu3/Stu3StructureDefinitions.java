@@ -26,6 +26,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * {@link StructureDefinitions} implementation for FHIR STU3.
+ * <p>
+ * Thread safety: <b>This class is thread safe</b> and may be shared between multiple processing
+ * threads.  However, there is no requirement, nor significant performance benefits to doing so.
  */
 public class Stu3StructureDefinitions extends StructureDefinitions {
 
@@ -545,7 +548,8 @@ public class Stu3StructureDefinitions extends StructureDefinitions {
   }
 
   @Override
-  public <T> T transform(DefinitionVisitor<T> visitor, String resourceTypeUrl) {
+  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
+  public synchronized <T> T transform(DefinitionVisitor<T> visitor, String resourceTypeUrl) {
 
     StructureDefinition definition = (StructureDefinition) context.getValidationSupport()
         .fetchStructureDefinition(context, resourceTypeUrl);
@@ -563,13 +567,16 @@ public class Stu3StructureDefinitions extends StructureDefinitions {
    *
    * @return The schema as a Spark StructType
    */
-  public <T> T transform(DefinitionVisitor<T> visitor, StructureDefinition definition) {
+  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
+  public synchronized <T> T transform(DefinitionVisitor<T> visitor,
+      StructureDefinition definition) {
 
     return transform(visitor, null, definition, new ArrayDeque<>());
   }
 
   @Override
-  public <T> T transform(DefinitionVisitor<T> visitor,
+  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
+  public synchronized <T> T transform(DefinitionVisitor<T> visitor,
       String resourceTypeUrl,
       List<String> containedResourceTypeUrls) {
 

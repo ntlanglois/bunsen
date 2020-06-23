@@ -1,11 +1,9 @@
 package com.cerner.bunsen.spark.codes;
 
-import java.io.Serializable;
-
 /**
  * URI and version tuple used to uniquely identify a concept map, value set, or hierarchy.
  */
-public class UrlAndVersion implements Serializable {
+public class UrlAndVersion {
 
   private String url;
 

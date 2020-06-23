@@ -6,7 +6,6 @@ import com.cerner.bunsen.spark.codes.Hierarchies;
 import com.cerner.bunsen.spark.codes.base.AbstractValueSets;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,16 +18,12 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * An immutable collection of value sets that can be broadcast for use in Spark transformations or
  * user-defined functions.
  */
 public class BroadcastableValueSets implements Serializable {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(BroadcastableValueSets.class);
 
   /**
    * A map from value set reference to code system to a set of values that are contained in that
@@ -195,16 +190,6 @@ public class BroadcastableValueSets implements Serializable {
           .filter(reference -> reference.getValueSetVersion() == null)
           .map(Reference::getValueSetUri)
           .collect(Collectors.toSet());
-
-      StringBuffer messageBuilder = new StringBuffer();
-      messageBuilder.append("!!!!! START addReferenceVersions ----------");
-      messageBuilder.append("\n!! latestValueSets URIs: ");
-      messageBuilder.append(Arrays.toString(latestValueSets.toArray()));
-      messageBuilder.append("\n!!!!! END ---------------------------------");
-
-      String message = messageBuilder.toString();
-      LOGGER.info(message);
-      System.out.println(message);
 
       final Map<String,String> versions = valueSets.getLatestVersions(latestValueSets, false);
 

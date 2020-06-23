@@ -18,8 +18,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang3.SerializationUtils;
-import org.apache.parquet.hadoop.util.SerializationUtil;
 import org.apache.spark.sql.SparkSession;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -36,8 +34,6 @@ public class BroadcastableValueSetsTest {
   static MockValueSets emptyValueSets;
 
   static MockValueSets mockValueSets;
-
-  static int count = 0;
 
   /**
    * Sets up Spark and loads test value sets.
@@ -58,7 +54,6 @@ public class BroadcastableValueSetsTest {
             "nonstrict")
         .config("spark.sql.warehouse.dir",
             Files.createTempDirectory("spark_warehouse").toString())
-        .config("bunsen.npe.actions", "true")
         .getOrCreate();
 
     emptyValueSets = new MockValueSets(spark, SparkRowConverter.forResource(
@@ -237,25 +232,16 @@ public class BroadcastableValueSetsTest {
         .containsAll(priorityValues.get("http://hl7.org/fhir/v3/ActPriority")));
   }
 
-  //  @Test
-  //  public void testSerialization() {
-  //    SparkSession cloneSpark = SerializationUtils.clone(spark);
-  //    Assert.assertEquals(spark, cloneSpark);
-  //  }
-
   /**
    * Added to address https://github.com/cerner/bunsen/issues/85
    */
   @Test
   public void testThreadSafety() {
     List<Future> futures = new ArrayList<>();
+    final ExecutorService pool = Executors.newFixedThreadPool(5);
 
-    System.out.println("HERE");
-    int threadCount = 5;
-    final ExecutorService pool = Executors.newFixedThreadPool(threadCount);
-
-    for (int i = 0; i < threadCount; i++) {
-      Future future = pool.submit(new BroadcastValueSetsThread(spark, i, threadCount));
+    for (int i = 0; i < 5; i++) {
+      Future future = pool.submit(new BroadcastValueSetsThread(spark, i));
       futures.add(future);
     }
 
@@ -273,7 +259,7 @@ public class BroadcastableValueSetsTest {
       throw new RuntimeException("Timeout occurred while awaiting completion.");
     }
 
-    futures.parallelStream()
+    futures.stream()
         .forEach(future -> {
           try {
             future.get();
@@ -286,13 +272,10 @@ public class BroadcastableValueSetsTest {
   protected class BroadcastValueSetsThread extends Thread {
     private final SparkSession session;
     private final int threadNum;
-    private final int totalThreads;
 
-    protected BroadcastValueSetsThread(final SparkSession session, final int threadNum,
-        int totalThreads) {
+    protected BroadcastValueSetsThread(final SparkSession session, final int threadNum) {
       this.session = session.cloneSession();
       this.threadNum = threadNum;
-      this.totalThreads = totalThreads;
     }
 
     @Override
@@ -300,15 +283,7 @@ public class BroadcastableValueSetsTest {
       String bp = "bp" + threadNum;
       String leukocytes = "leukocytes" + threadNum;
       String priorities = "priorities" + threadNum;
-      try {
-        Thread.sleep(totalThreads - threadNum);
-      } catch (InterruptedException ex) {
-        throw new RuntimeException(ex);
-      }
-      //      count++;
-      //      Assert.assertEquals(threadNum + 1, count);
 
-      System.out.println("HERE" + threadNum + " " + System.currentTimeMillis());
       BroadcastableValueSets valueSets = BroadcastableValueSets.newBuilder()
           .addCode(bp,
               Loinc.LOINC_CODE_SYSTEM_URI,
@@ -336,7 +311,6 @@ public class BroadcastableValueSetsTest {
       Assert.assertTrue(priorityValues.containsKey("http://hl7.org/fhir/v3/ActPriority"));
       Assert.assertTrue(ImmutableSet.of("EM")
           .containsAll(priorityValues.get("http://hl7.org/fhir/v3/ActPriority")));
-      System.out.println("END" + threadNum + " " + System.currentTimeMillis());
     }
   }
 }
