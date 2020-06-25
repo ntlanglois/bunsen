@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * {@link StructureDefinitions} implementation for FHIR STU3.
- * <p>
- * Thread safety: <b>This class is thread safe</b> and may be shared between multiple processing
+ *
+ * <p>Thread safety: <b>This class is thread safe</b> and may be shared between multiple processing
  * threads.  However, there is no requirement, nor significant performance benefits to doing so.
  */
 public class Stu3StructureDefinitions extends StructureDefinitions {
