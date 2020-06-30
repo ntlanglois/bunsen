@@ -1,11 +1,9 @@
 package com.cerner.bunsen.stu3.python;
 
 import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.parser.IParser;
 import com.cerner.bunsen.FhirContexts;
 import com.cerner.bunsen.spark.SparkRowConverter;
-import com.cerner.bunsen.spark.converters.HasSerializableConverter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.List;
@@ -78,21 +76,38 @@ public class Functions {
     return CONTEXT.newJsonParser().encodeResourceToString(bundle);
   }
 
-  static class ToJson extends HasSerializableConverter implements MapFunction<Row, String> {
+  static class ToJson implements MapFunction<Row, String> {
+
+    /**
+     * Create a new parser instance for each object, since they are not
+     * guaranteed to be thread safe.
+     */
+    private transient IParser parser = CONTEXT.newJsonParser();
+
+    private String resourceTypeUrl;
+
+    private transient SparkRowConverter converter;
 
     ToJson(String resourceTypeUrl) {
-      super(resourceTypeUrl, FhirVersionEnum.DSTU3);
+
+      this.resourceTypeUrl = resourceTypeUrl;
+    }
+
+    private void readObject(ObjectInputStream in) throws IOException,
+        ClassNotFoundException {
+
+      in.defaultReadObject();
+
+      parser = CONTEXT.newJsonParser();
+
+      converter = SparkRowConverter.forResource(CONTEXT, resourceTypeUrl);
     }
 
     public String call(Row row) throws Exception {
 
       IBaseResource resource = converter.rowToResource(row);
 
-      /**
-       * Create a new parser instance for each call, since they are not
-       * guaranteed to be thread safe, but are cheap to create.
-       */
-      return context.newJsonParser().encodeResourceToString(resource);
+      return parser.encodeResourceToString(resource);
     }
   }
 

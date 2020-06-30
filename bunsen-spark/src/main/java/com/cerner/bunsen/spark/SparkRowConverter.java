@@ -69,6 +69,7 @@ public class SparkRowConverter {
    * @return an Avro converter instance.
    */
   // synchronized due to DATALAB-1339
+  // test no synchronized and should fail due to DATALAB-1339
   public static synchronized SparkRowConverter forResource(FhirContext context,
       String resourceTypeUrl,
       List<String> containedResourceTypeUrls) {

@@ -6,7 +6,6 @@ import ca.uhn.fhir.context.RuntimeResourceDefinition;
 import ca.uhn.fhir.parser.IParser;
 import com.cerner.bunsen.FhirContexts;
 import com.cerner.bunsen.definitions.FhirConversionSupport;
-import com.cerner.bunsen.spark.serializable.HasSerializableContext;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
@@ -311,23 +310,40 @@ public class Bundles {
     }
   }
 
-  private static class StringToBundle extends HasSerializableContext implements
-      Function<String, BundleContainer> {
+  private static class StringToBundle implements Function<String, BundleContainer> {
 
     private boolean isXml;
 
-    StringToBundle(boolean isXml, FhirVersionEnum fhirVersion) {
-      super(fhirVersion);
+    private FhirVersionEnum fhirVersion;
 
+    private transient IParser parser;
+
+    StringToBundle(boolean isXml, FhirVersionEnum fhirVersion) {
       this.isXml = isXml;
+      this.fhirVersion = fhirVersion;
+
+      parser = isXml
+          ? FhirContexts.contextFor(fhirVersion).newXmlParser()
+          : FhirContexts.contextFor(fhirVersion).newJsonParser();
+    }
+
+    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+
+      stream.defaultWriteObject();
+    }
+
+    private void readObject(java.io.ObjectInputStream stream) throws IOException,
+        ClassNotFoundException {
+
+      stream.defaultReadObject();
+
+      parser = isXml
+          ? FhirContexts.contextFor(fhirVersion).newXmlParser()
+          : FhirContexts.contextFor(fhirVersion).newJsonParser();
     }
 
     @Override
     public BundleContainer call(String bundleString) throws Exception {
-
-      IParser parser = isXml
-          ? context.newXmlParser()
-          : context.newJsonParser();
 
       IBaseBundle bundle = (IBaseBundle) parser.parseResource(bundleString);
 
@@ -335,11 +351,33 @@ public class Bundles {
     }
   }
 
-  private static class ToBundle extends HasSerializableContext implements
-      Function<Tuple2<String, String>, BundleContainer> {
+  private static class ToBundle implements Function<Tuple2<String, String>, BundleContainer> {
+
+    private FhirVersionEnum fhirVersion;
+
+    private transient IParser xmlParser;
+
+    private transient IParser jsonParser;
 
     ToBundle(FhirVersionEnum fhirVersion) {
-      super(fhirVersion);
+      this.fhirVersion = fhirVersion;
+
+      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
+      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
+    }
+
+    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+
+      stream.defaultWriteObject();
+    }
+
+    private void readObject(java.io.ObjectInputStream stream) throws IOException,
+        ClassNotFoundException {
+
+      stream.defaultReadObject();
+
+      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
+      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
     }
 
     @Override
@@ -347,23 +385,20 @@ public class Bundles {
 
       String filePath = fileContentTuple._1.toLowerCase();
 
-      IParser parser;
-
       if (filePath.endsWith(".xml")) {
 
-        parser = context.newXmlParser();
+        return new BundleContainer((IBaseBundle) xmlParser.parseResource(fileContentTuple._2()),
+            fhirVersion);
 
       } else if (filePath.endsWith(".json")) {
 
-        parser = context.newJsonParser();
+        return new BundleContainer((IBaseBundle) jsonParser.parseResource(fileContentTuple._2()),
+            fhirVersion);
 
       } else {
 
         throw new RuntimeException("Unrecognized file extension for resource: " + filePath);
       }
-
-      return new BundleContainer((IBaseBundle) parser.parseResource(fileContentTuple._2()),
-          fhirVersion);
     }
   }
 

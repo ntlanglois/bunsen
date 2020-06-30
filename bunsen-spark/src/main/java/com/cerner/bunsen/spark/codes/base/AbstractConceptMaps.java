@@ -3,7 +3,6 @@ package com.cerner.bunsen.spark.codes.base;
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.lit;
 
-import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.parser.IParser;
 import com.cerner.bunsen.FhirContexts;
@@ -11,7 +10,6 @@ import com.cerner.bunsen.spark.SparkRowConverter;
 import com.cerner.bunsen.spark.codes.Mapping;
 import com.cerner.bunsen.spark.codes.UrlAndVersion;
 import com.cerner.bunsen.spark.codes.broadcast.BroadcastableMappings;
-import com.cerner.bunsen.spark.converters.HasSerializableConverter;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.Arrays;
@@ -123,11 +121,41 @@ public abstract class AbstractConceptMaps<T extends IBaseResource,
         .as(URL_AND_VERSION_ENCODER);
   }
 
-  private static class ToConceptMap extends HasSerializableConverter implements
-      Function<Tuple2<String, String>, Row> {
+  private static class ToConceptMap implements Function<Tuple2<String, String>, Row> {
+
+    private FhirVersionEnum fhirVersion;
+
+    private transient IParser xmlParser;
+
+    private transient IParser jsonParser;
+
+    private transient SparkRowConverter converter;
 
     ToConceptMap(FhirVersionEnum fhirVersion) {
-      super("ConceptMap", fhirVersion);
+      this.fhirVersion = fhirVersion;
+
+      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
+      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
+
+      converter = SparkRowConverter.forResource(FhirContexts.contextFor(fhirVersion),
+          "ConceptMap");
+    }
+
+    private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+
+      stream.defaultWriteObject();
+    }
+
+    private void readObject(java.io.ObjectInputStream stream) throws IOException,
+        ClassNotFoundException {
+
+      stream.defaultReadObject();
+
+      xmlParser = FhirContexts.contextFor(fhirVersion).newXmlParser();
+      jsonParser = FhirContexts.contextFor(fhirVersion).newJsonParser();
+
+      converter = SparkRowConverter.forResource(FhirContexts.contextFor(fhirVersion),
+          "ConceptMap");
     }
 
     @Override
@@ -135,22 +163,20 @@ public abstract class AbstractConceptMaps<T extends IBaseResource,
 
       String filePath = fileContentTuple._1.toLowerCase();
 
-      IParser parser;
+      IBaseResource resource;
 
       if (filePath.endsWith(".xml")) {
 
-        parser = context.newXmlParser();
+        resource = xmlParser.parseResource(fileContentTuple._2());
 
       } else if (filePath.endsWith(".json")) {
 
-        parser = context.newJsonParser();
+        resource = jsonParser.parseResource(fileContentTuple._2());
 
       } else {
 
         throw new RuntimeException("Unrecognized file extension for resource: " + filePath);
       }
-
-      IBaseResource resource = parser.parseResource(fileContentTuple._2());
 
       return converter.resourceToRow(resource);
     }
