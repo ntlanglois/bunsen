@@ -548,8 +548,7 @@ public class Stu3StructureDefinitions extends StructureDefinitions {
   }
 
   @Override
-  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
-  public synchronized <T> T transform(DefinitionVisitor<T> visitor, String resourceTypeUrl) {
+  public <T> T transform(DefinitionVisitor<T> visitor, String resourceTypeUrl) {
 
     StructureDefinition definition = (StructureDefinition) context.getValidationSupport()
         .fetchStructureDefinition(context, resourceTypeUrl);
@@ -567,16 +566,14 @@ public class Stu3StructureDefinitions extends StructureDefinitions {
    *
    * @return The schema as a Spark StructType
    */
-  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
-  public synchronized <T> T transform(DefinitionVisitor<T> visitor,
+  public <T> T transform(DefinitionVisitor<T> visitor,
       StructureDefinition definition) {
 
     return transform(visitor, null, definition, new ArrayDeque<>());
   }
 
   @Override
-  // synchronized to ensure thread-safety and avoid TODO link bunsen github issue
-  public synchronized <T> T transform(DefinitionVisitor<T> visitor,
+  public <T> T transform(DefinitionVisitor<T> visitor,
       String resourceTypeUrl,
       List<String> containedResourceTypeUrls) {
 
